@@ -15,7 +15,7 @@ class FeatureExtractor(nn.Module):
         out, _ = self.gru(x)
         out = out[:, -1, :]
         e_s = self.normalize(out)
-        return out
+        return e_s
 
 
 class PriorBetaModule(nn.Module):
@@ -191,6 +191,6 @@ if __name__ == "__main__":
     model1 = _FactorGCL(input_size, hidden_size, num_factors, num_layers, dropout)
     model2 = FactorGCL(input_size, hidden_size, num_factors, num_layers, dropout, criterion, gamma)
     pred = model1(X, industry_matrix)
-    print(pred.shape)  # should be (3000, 1)
+    print(pred.shape)  # should be (3000,)
     loss = model2(X, X_future, y, industry_matrix)
     print(loss)  # should be a scalar tensor

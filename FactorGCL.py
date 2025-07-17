@@ -6,15 +6,18 @@ from torch_geometric.nn import HypergraphConv
 
 class FeatureExtractor(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, dropout):
-        super(FeatureExtractor, self).__init__()        
+        super(FeatureExtractor, self).__init__()
+        self.normalize = nn.LayerNorm(input_size)
+        self.linear = nn.Linear(input_size, input_size)
+        self.leaky_relu = nn.LeakyReLU()  
         self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
-        self.normalize = nn.BatchNorm1d(hidden_size)
 
     def forward(self, x):
         # x: (num_stocks, seq_len, input_size)
+        x = self.normalize(x)
+        out = self.linear(x)
         out, _ = self.gru(x)
-        out = out[:, -1, :]
-        e_s = self.normalize(out)
+        e_s = out[:, -1, :]
         return e_s
 
 
@@ -98,7 +101,8 @@ class _FactorGCL(nn.Module):
         e_p = self.prior_beta_module(e_s, industry_matrix)
         e_r = e_s - e_p
         e_h = self.hidden_beta_module(e_r)
-        e_alpha = self.individual_alpha_module(e_r)
+        e_residual = e_r - e_h
+        e_alpha = self.individual_alpha_module(e_residual)
 
         out = torch.concat([e_p, e_h, e_alpha], dim=1)
         out = self.fc(out)
@@ -143,7 +147,8 @@ class FactorGCL(nn.Module):
         e_p_future = self.prior_beta_module(e_s_future, industry_matrix)
         e_r_future = e_s_future - e_p_future
         e_h_future = self.hidden_beta_module(e_r_future)
-        # e_alpha_future = self.individual_alpha_module(e_r_future)
+        # e_residual_future = e_r_future - e_h_future
+        # e_alpha_future = self.individual_alpha_module(e_residual_future)
         e_alpha_future = e_r_future - e_h_future
 
         if self.negative_mode == 'paired':
@@ -166,9 +171,10 @@ class FactorGCL(nn.Module):
             e_p = self.prior_beta_module(e_s, industry_matrix)
             e_r = e_s - e_p
             e_h = self.hidden_beta_module(e_r)
-            e_alpha = self.individual_alpha_module(e_r)
+            e_residual = e_r - e_h
+            e_alpha = self.individual_alpha_module(e_residual)
 
-            out = torch.concat([e_s, e_h, e_alpha], dim=1)
+            out = torch.concat([e_p, e_h, e_alpha], dim=1)
             out = self.fc(out)
             return out
 

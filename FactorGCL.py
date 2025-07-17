@@ -15,7 +15,7 @@ class FeatureExtractor(nn.Module):
         out, _ = self.gru(x)
         out = out[:, -1, :]
         e_s = self.normalize(out)
-        return e_s
+        return out
 
 
 class PriorBetaModule(nn.Module):
@@ -45,8 +45,10 @@ class SoftHypergraphConv(nn.Module):
         H: (num_nodes, num_hyperedges), between 0 and 1
         """
         d_n, d_e = H.sum(dim=1), H.sum(dim=0) # degrees of nodes and hyperedges
-        D_n_inv_sqrt = torch.diag(1.0 / torch.sqrt(d_n + 1e-8))
-        D_e_inv = torch.diag(1.0 / (d_e + 1e-8))
+        D_n_inv_sqrt = torch.diag(1.0 / torch.sqrt(d_n))
+        D_n_inv_sqrt[D_n_inv_sqrt == float('inf')] = 0.0
+        D_e_inv = torch.diag(1.0 / (d_e))
+        D_e_inv[D_e_inv == float('inf')] = 0.0
         
         x_transformed = self.linear(x)  # (num_nodes, out_channels)
         out = D_n_inv_sqrt @ H @ D_e_inv @ H.T @ x_transformed  # (num_nodes, out_channels)
@@ -98,8 +100,9 @@ class _FactorGCL(nn.Module):
         e_h = self.hidden_beta_module(e_r)
         e_alpha = self.individual_alpha_module(e_r)
 
-        out = torch.concat([e_s, e_h, e_alpha], dim=1)
+        out = torch.concat([e_p, e_h, e_alpha], dim=1)
         out = self.fc(out)
+        out = out.reshape(-1).squeeze()
         return out
     
     def predict(self, x, industry_matrix):
@@ -131,8 +134,8 @@ class FactorGCL(nn.Module):
         e_residual = e_r - e_h
         e_alpha = self.individual_alpha_module(e_residual)
 
-        y_pred = torch.concat([e_s, e_h, e_alpha], dim=1)
-        y_pred = self.fc(y_pred)
+        y_pred = torch.concat([e_p, e_h, e_alpha], dim=1)
+        y_pred = self.fc(y_pred).reshape(-1)
         pred_loss = self.criterion(y_pred, y)
 
         # Temporal Residual Contrastive Learning
@@ -175,15 +178,15 @@ if __name__ == "__main__":
     X = torch.randn(3000, 20, 64)  # (num_stocks, seq_len, input_size)
     X_future = torch.randn(3000, 10, 64)  # (num_stocks, seq_len_future, input_size)
     industry_matrix = torch.randint(0, 2, (3000, 50))  # (num_stocks, num_industries)
-    y = torch.randn(3000, 1)  # (num_stocks, 1)
+    y = torch.randn(3000)  # (num_stocks)
 
     input_size = 64
     hidden_size = 32
     num_factors = 128
     num_layers = 2
     dropout = 0.1
-    criterion=nn.MSELoss()
-    gamma=0.1
+    criterion = nn.MSELoss()
+    gamma = 0.1
 
     model1 = _FactorGCL(input_size, hidden_size, num_factors, num_layers, dropout)
     model2 = FactorGCL(input_size, hidden_size, num_factors, num_layers, dropout, criterion, gamma)

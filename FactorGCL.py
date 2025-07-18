@@ -124,7 +124,9 @@ class FactorGCL(nn.Module):
         self.individual_alpha_module = IndividualAlphaModule(hidden_size)
         self.fc = nn.Linear(hidden_size * 3, 1)
 
-        self.negative_mode = 'paired'
+        # self.negative_mode = 'paired'
+        # using 'paired' mode for negative sampling will make the traning much slower
+        self.negative_mode = None
         self.feature_extractor_future = FeatureExtractor(input_size, hidden_size, num_layers, dropout)
         self.info_nce = InfoNCE(negative_mode=self.negative_mode)
         self.criterion = criterion
@@ -176,6 +178,7 @@ class FactorGCL(nn.Module):
 
             out = torch.concat([e_p, e_h, e_alpha], dim=1)
             out = self.fc(out)
+            out = out.reshape(-1).squeeze()
             return out
 
 
